@@ -779,35 +779,44 @@ window.switchCamera=async function(){
   await startStream();
 };
 
+
 async function loadRecognizer(){
   try{
-    // 改用动态导入：避免网络环境或跨域报错阻塞整个游戏主逻辑
-    // 顺便将 cdn.jsdelivr.net 替换为了 unpkg.com 以提高国内加载成功率
-    const mp = await import('https://unpkg.com/@mediapipe/tasks-vision@0.10.3/vision_bundle.js');
+    // 1. 定义资源基础路径 (建议使用 jsdelivr 镜像，比 unpkg 在国内更稳)
+    const CDN_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3';
+    
+    // 2. 动态导入库
+    const mp = await import(`${CDN_BASE}/vision_bundle.mjs`);
     const { GestureRecognizer, FilesetResolver } = mp;
 
-    const vision=await FilesetResolver.forVisionTasks(
-      'https://unpkg.com/@mediapipe/tasks-vision@0.10.3/wasm'
+    // 3. 加载 WASM (这里依然建议指向 CDN，因为 WASM 文件较多)
+    const vision = await FilesetResolver.forVisionTasks(
+      `${CDN_BASE}/wasm`
     );
     
-    recognizer=await GestureRecognizer.createFromOptions(vision,{
-      baseOptions:{
-        modelAssetPath:'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task',
-        delegate:'GPU'
+    // 4. 【关键修改】使用本地路径加载模型
+    recognizer = await GestureRecognizer.createFromOptions(vision, {
+      baseOptions: {
+        // 直接指向同目录下的文件
+        modelAssetPath: './gesture_recognizer.task', 
+        delegate: 'GPU'
       },
-      runningMode:'VIDEO',
-      numHands:2,
-      minHandDetectionConfidence:0.6,
-      minHandPresenceConfidence:0.6,
-      minTrackingConfidence:0.5,
+      runningMode: 'VIDEO',
+      numHands: 2,
+      minHandDetectionConfidence: 0.6,
+      minHandPresenceConfidence: 0.6,
+      minTrackingConfidence: 0.5,
     });
+    
+    console.log("模型本地加载成功");
     requestAnimationFrame(detectLoop);
-  }catch(e){
-    console.warn('MediaPipe Tasks failed, falling back', e);
-    // 加载失败时也能正常调用降级方案，保证游戏可以继续玩
+  } catch(e) {
+    console.warn('MediaPipe 初始化失败，详情:', e);
+    // 触发点击屏幕/空格键的降级方案
     setupFallback();
   }
 }
+
 
 function detectLoop(){
   if(!recognizer||!videoEl||videoEl.readyState<2){requestAnimationFrame(detectLoop);return;}
