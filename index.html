@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>手势挑战 · 掌刀锤</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mediapipe/0.10.3/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;700;900&family=Bebas+Neue&display=swap');
+
+  :root {
+    --bg: #0a0a12;
+    --surface: #12121e;
+    --card: #1a1a2e;
+    --accent: #ff6b35;
+    --accent2: #ffd23f;
+    --accent3: #06ffa5;
+    --text: #f0f0ff;
+    --muted: #5a5a7a;
+    --correct: #06ffa5;
+    --wrong: #ff3366;
+    --border: rgba(255,255,255,0.07);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans SC', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(255,107,53,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,107,53,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    padding: 30px 0 20px;
+  }
+
+  header h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(3rem, 8vw, 6rem);
+    letter-spacing: 0.1em;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 50%, var(--accent3) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+  }
+
+  header p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-top: 6px;
+    letter-spacing: 0.2em;
+  }
+
+  /* Screens */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* Setup screen */
+  .setup-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 40px;
+    max-width: 480px;
+    margin: 20px auto;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .setup-card::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px; right: -1px;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3));
+  }
+
+  .setup-card h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 28px;
+    color: var(--text);
+  }
+
+  .field {
+    margin-bottom: 24px;
+  }
+
+  .field label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+
+  .field input[type="text"] {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-size: 1rem;
+    font-family: 'Noto Sans SC', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .field input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+
+  .rounds-selector {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .round-btn {
+    flex: 1;
+    min-width: 60px;
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--muted);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.05em;
+    font-size: 1.2rem;
+  }
+
+  .round-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .round-btn.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .start-btn {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--accent), #ff9a5c);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 20px rgba(255,107,53,0.3);
+  }
+
+  .start-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(255,107,53,0.4);
+  }
+
+  .start-btn:active { transform: translateY(0); }
+
+  /* Game screen */
+  .game-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  @media (max-width: 700px) {
+    .game-layout { grid-template-columns: 1fr; }
+  }
+
+  .game-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 24px;
+    position: relative;
+  }
+
+  .panel-label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  /* Dual gesture display */
+  .dual-gesture-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px 0;
+  }
+
+  .hand-card {
+    flex: 1;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 10px;
+    text-align: center;
+    transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
+  }
+
+  .hand-card.hand-correct {
+    border-color: var(--correct);
+    background: rgba(6,255,165,0.08);
+    box-shadow: 0 0 20px rgba(6,255,165,0.2);
+  }
+
+  .hand-card.hand-wrong {
+    border-color: var(--wrong);
+    background: rgba(255,51,102,0.08);
+    box-shadow: 0 0 20px rgba(255,51,102,0.2);
+  }
+
+  .hand-side-label {
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+
+  .hand-divider {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.2rem;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  /* Gesture display */
+  .gesture-display {
+    text-align: center;
+    padding: 20px 0;
+  }
+
+  .gesture-emoji {
+    font-size: 5rem;
+    line-height: 1;
+    display: block;
+    filter: drop-shadow(0 0 20px rgba(255,107,53,0.4));
+    animation: pulse 1.5s ease-in-out infinite;
+    transition: all 0.3s;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.07); }
+  }
+
+  .gesture-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem;
+    letter-spacing: 0.1em;
+    margin-top: 8px;
+    color: var(--accent2);
+  }
+
+  /* Detected labels for two hands */
+  .detected-labels {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .detected-label {
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(10px);
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.08em;
+    font-size: 1rem;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  /* Camera */
+  .camera-wrap {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    aspect-ratio: 4/3;
+    background: #000;
+  }
+
+  #videoEl {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    display: block;
+  }
+
+  #canvasEl {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(-1);
+  }
+
+  .detected-label {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(10px);
+    padding: 6px 18px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.1em;
+    font-size: 1.1rem;
+    white-space: nowrap;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 14px 20px;
+    border: 1px solid var(--border);
+  }
+
+  .stat {
+    text-align: center;
+  }
+
+  .stat-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    line-height: 1;
+  }
+
+  .stat-key {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 2px;
+  }
+
+  .stat-val.orange { color: var(--accent); }
+  .stat-val.yellow { color: var(--accent2); }
+  .stat-val.green { color: var(--accent3); }
+
+  /* Feedback overlay */
+  .feedback-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .feedback-overlay.show { opacity: 1; }
+
+  .feedback-bubble {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 8rem;
+    letter-spacing: 0.05em;
+    text-align: center;
+    text-shadow: 0 0 60px currentColor;
+    animation: feedbackAnim 0.6s ease-out forwards;
+  }
+
+  .feedback-bubble.correct { color: var(--correct); }
+  .feedback-bubble.wrong { color: var(--wrong); }
+
+  @keyframes feedbackAnim {
+    0% { transform: scale(0.5); opacity: 0; }
+    40% { transform: scale(1.2); opacity: 1; }
+    70% { transform: scale(0.95); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* Progress */
+  .progress-bar {
+    height: 4px;
+    background: var(--surface);
+    border-radius: 2px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  /* Countdown */
+  .countdown-ring {
+    position: absolute;
+    top: 12px; right: 12px;
+    width: 50px; height: 50px;
+  }
+
+  .countdown-ring svg { transform: rotate(-90deg); }
+  .countdown-ring circle {
+    fill: none;
+    stroke: var(--surface);
+    stroke-width: 4;
+  }
+  .countdown-ring .arc {
+    stroke: var(--accent2);
+    stroke-dasharray: 113;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 0.1s linear;
+  }
+
+  .countdown-num {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    color: var(--accent2);
+  }
+
+  /* Result screen */
+  .result-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 40px;
+    max-width: 500px;
+    margin: 20px auto;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .result-card::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px; right: -1px;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent3), var(--accent2), var(--accent));
+  }
+
+  .result-score {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 5rem;
+    line-height: 1;
+    background: linear-gradient(135deg, var(--accent2), var(--accent3));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .result-sub {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-top: 6px;
+    letter-spacing: 0.1em;
+  }
+
+  .result-grade {
+    font-size: 4rem;
+    margin: 20px 0;
+  }
+
+  /* Leaderboard */
+  .leaderboard {
+    margin-top: 32px;
+    text-align: left;
+  }
+
+  .lb-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    letter-spacing: 0.1em;
+    color: var(--accent2);
+    margin-bottom: 14px;
+  }
+
+  .lb-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    transition: border-color 0.2s;
+  }
+
+  .lb-entry.highlight {
+    border-color: var(--accent2);
+    background: rgba(255,210,63,0.05);
+  }
+
+  .lb-rank {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    color: var(--muted);
+    width: 30px;
+    text-align: center;
+  }
+
+  .lb-rank.gold { color: #ffd700; }
+  .lb-rank.silver { color: #c0c0c0; }
+  .lb-rank.bronze { color: #cd7f32; }
+
+  .lb-name { flex: 1; font-weight: 500; }
+  .lb-score {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    color: var(--accent3);
+  }
+
+  .lb-rounds {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .action-btns {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .btn-secondary {
+    flex: 1;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-primary {
+    flex: 1;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--accent), #ff9a5c);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(255,107,53,0.3);
+  }
+
+  .btn-primary:hover { transform: translateY(-2px); }
+
+  /* Loading spinner */
+  .loading-msg {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    letter-spacing: 0.1em;
+  }
+
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Hand not detected */
+  .no-hand-msg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8);
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  /* Gesture hint icons in setup */
+  .gesture-preview {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin: 24px 0;
+  }
+
+  .gesture-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .gesture-pill span:first-child {
+    font-size: 2.5rem;
+  }
+
+  .gesture-pill span:last-child {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* Timer warning */
+  @keyframes timerWarn {
+    0%, 100% { color: var(--accent2); }
+    50% { color: var(--wrong); }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>手势挑战</h1>
+    <p>PALM · KNIFE · HAMMER</p>
+  </header>
+
+  <!-- Setup Screen -->
+  <div id="setupScreen" class="screen active">
+    <div class="setup-card">
+      <h2>⚙️ 游戏设置</h2>
+
+      <div class="gesture-preview">
+        <div class="gesture-pill"><span>🖐️</span><span>手掌</span></div>
+        <div class="gesture-pill"><span>🫱</span><span>刀</span></div>
+        <div class="gesture-pill"><span>✊</span><span>锤子</span></div>
+      </div>
+      <p style="text-align:center;font-size:0.8rem;color:var(--muted);margin:-10px 0 20px;letter-spacing:0.05em;">左右手同时各做一个不同手势</p>
+
+      <div class="field">
+        <label>玩家名称</label>
+        <input type="text" id="playerName" placeholder="请输入名字..." maxlength="12" />
+      </div>
+
+      <div class="field">
+        <label>每局回合数</label>
+        <div class="rounds-selector">
+          <button class="round-btn" data-val="5">5</button>
+          <button class="round-btn selected" data-val="10">10</button>
+          <button class="round-btn" data-val="15">15</button>
+          <button class="round-btn" data-val="20">20</button>
+        </div>
+      </div>
+
+      <button class="start-btn" onclick="startGame()">开始游戏</button>
+    </div>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="gameScreen" class="screen">
+    <div class="status-bar">
+      <div class="stat">
+        <div class="stat-val orange" id="statRound">1</div>
+        <div class="stat-key">回合</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val yellow" id="statTotal">10</div>
+        <div class="stat-key">总数</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val green" id="statScore">0</div>
+        <div class="stat-key">得分</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="statStreak">🔥 0</div>
+        <div class="stat-key">连击</div>
+      </div>
+    </div>
+
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+
+    <div class="game-layout">
+      <!-- Target gestures: LEFT + RIGHT hand -->
+      <div class="game-panel">
+        <div class="panel-label">目标手势（左手 · 右手）</div>
+        <div class="dual-gesture-display">
+          <!-- Left hand -->
+          <div class="hand-card" id="handCardLeft">
+            <div class="hand-side-label">🫲 左手</div>
+            <span class="gesture-emoji" id="gestureEmojiLeft">🖐️</span>
+            <div class="gesture-name" id="gestureNameLeft">手掌</div>
+          </div>
+
+          <div class="hand-divider">VS</div>
+
+          <!-- Right hand -->
+          <div class="hand-card" id="handCardRight">
+            <div class="hand-side-label">右手 🫱</div>
+            <span class="gesture-emoji" id="gestureEmojiRight">✊</span>
+            <div class="gesture-name" id="gestureNameRight">锤子</div>
+          </div>
+        </div>
+
+        <!-- Countdown ring -->
+        <div class="countdown-ring" id="countdownRing">
+          <svg viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="18"/>
+            <circle class="arc" id="arcCircle" cx="20" cy="20" r="18"/>
+          </svg>
+          <div class="countdown-num" id="countdownNum">3</div>
+        </div>
+      </div>
+
+      <!-- Camera -->
+      <div class="game-panel">
+        <div class="panel-label">摄像头检测</div>
+        <div class="camera-wrap">
+          <video id="videoEl" autoplay playsinline muted></video>
+          <canvas id="canvasEl"></canvas>
+          <div class="no-hand-msg" id="noHandMsg">🤚 请将双手放入画面</div>
+          <div class="detected-labels">
+            <div class="detected-label" id="detectedLabelLeft">左手: 检测中</div>
+            <div class="detected-label" id="detectedLabelRight">右手: 检测中</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result Screen -->
+  <div id="resultScreen" class="screen">
+    <div class="result-card">
+      <div class="result-grade" id="resultGrade">🎉</div>
+      <div class="result-score" id="resultScore">0/10</div>
+      <div class="result-sub" id="resultSub">太棒了！</div>
+
+      <div class="leaderboard" id="leaderboard"></div>
+
+      <div class="action-btns">
+        <button class="btn-secondary" onclick="goSetup()">换人</button>
+        <button class="btn-primary" onclick="playAgain()">再来一局</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback overlay -->
+<div class="feedback-overlay" id="feedbackOverlay">
+  <div class="feedback-bubble" id="feedbackBubble">✓</div>
+</div>
+
+<!-- MediaPipe scripts -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ═══════════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════════
+const GESTURES = [
+  { id: 'palm',   name: '手掌', emoji: '🖐️' },
+  { id: 'knife',  name: '刀',   emoji: '🫱' },
+  { id: 'hammer', name: '锤子', emoji: '✊' },
+];
+
+let state = {
+  playerName: '',
+  totalRounds: 10,
+  currentRound: 0,
+  score: 0,
+  streak: 0,
+  targetLeft: null,   // left hand target gesture
+  targetRight: null,  // right hand target gesture
+  phase: 'idle', // idle | waiting | judging | feedback
+  countdownVal: 3,
+  countdownTimer: null,
+  detectedLeft: null,
+  detectedRight: null,
+  handCount: 0,
+};
+
+// ═══════════════════════════════════════════════
+// ROUND BUTTONS
+// ═══════════════════════════════════════════════
+document.querySelectorAll('.round-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.round-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+  });
+});
+
+// ═══════════════════════════════════════════════
+// SCREENS
+// ═══════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goSetup() { showScreen('setupScreen'); }
+
+function playAgain() {
+  state.currentRound = 0;
+  state.score = 0;
+  state.streak = 0;
+  state.detectedLeft = null;
+  state.detectedRight = null;
+  showScreen('gameScreen');
+  updateHUD();
+  nextRound();
+}
+
+// ═══════════════════════════════════════════════
+// GAME LOGIC
+// ═══════════════════════════════════════════════
+function startGame() {
+  const nameInput = document.getElementById('playerName').value.trim();
+  state.playerName = nameInput || '匿名玩家';
+  const selectedBtn = document.querySelector('.round-btn.selected');
+  state.totalRounds = parseInt(selectedBtn?.dataset.val || '10');
+  state.currentRound = 0;
+  state.score = 0;
+  state.streak = 0;
+  state.phase = 'idle';
+
+  showScreen('gameScreen');
+  document.getElementById('statTotal').textContent = state.totalRounds;
+  updateHUD();
+
+  // Init camera if not already
+  if (!cameraInited) initCamera();
+  
+  setTimeout(nextRound, 800);
+}
+
+function nextRound() {
+  if (state.currentRound >= state.totalRounds) {
+    endGame();
+    return;
+  }
+
+  state.currentRound++;
+  state.phase = 'waiting';
+  state.detectedLeft = null;
+  state.detectedRight = null;
+
+  // Pick two independent random gestures for left and right hands
+  state.targetLeft  = GESTURES[Math.floor(Math.random() * GESTURES.length)];
+  state.targetRight = GESTURES[Math.floor(Math.random() * GESTURES.length)];
+
+  // Update dual gesture display
+  document.getElementById('gestureEmojiLeft').textContent  = state.targetLeft.emoji;
+  document.getElementById('gestureNameLeft').textContent   = state.targetLeft.name;
+  document.getElementById('gestureEmojiRight').textContent = state.targetRight.emoji;
+  document.getElementById('gestureNameRight').textContent  = state.targetRight.name;
+
+  updateHUD();
+  startCountdown();
+}
+
+function startCountdown() {
+  state.countdownVal = 3;
+  updateCountdownUI();
+  
+  if (state.countdownTimer) clearInterval(state.countdownTimer);
+  
+  state.countdownTimer = setInterval(() => {
+    state.countdownVal--;
+    updateCountdownUI();
+    
+    if (state.countdownVal <= 0) {
+      clearInterval(state.countdownTimer);
+      judgeGesture();
+    }
+  }, 1000);
+}
+
+function updateCountdownUI() {
+  const num = document.getElementById('countdownNum');
+  const arc = document.getElementById('arcCircle');
+  num.textContent = state.countdownVal;
+  const pct = state.countdownVal / 3;
+  const circumference = 2 * Math.PI * 18;
+  arc.style.strokeDashoffset = circumference * (1 - pct);
+  
+  if (state.countdownVal === 1) {
+    arc.style.stroke = 'var(--wrong)';
+    num.style.color = 'var(--wrong)';
+  } else {
+    arc.style.stroke = 'var(--accent2)';
+    num.style.color = 'var(--accent2)';
+  }
+}
+
+function judgeGesture() {
+  if (state.phase !== 'waiting') return;
+  state.phase = 'judging';
+
+  const leftOk  = state.detectedLeft  === state.targetLeft.id;
+  const rightOk = state.detectedRight === state.targetRight.id;
+  const correct = leftOk && rightOk;
+
+  if (correct) {
+    state.score++;
+    state.streak++;
+  } else {
+    state.streak = 0;
+  }
+
+  // Visual feedback per hand
+  document.getElementById('handCardLeft').classList.toggle('hand-correct', leftOk);
+  document.getElementById('handCardLeft').classList.toggle('hand-wrong', !leftOk);
+  document.getElementById('handCardRight').classList.toggle('hand-correct', rightOk);
+  document.getElementById('handCardRight').classList.toggle('hand-wrong', !rightOk);
+
+  showFeedback(correct);
+  updateHUD();
+
+  setTimeout(() => {
+    document.getElementById('handCardLeft').classList.remove('hand-correct','hand-wrong');
+    document.getElementById('handCardRight').classList.remove('hand-correct','hand-wrong');
+    state.phase = 'idle';
+    nextRound();
+  }, 1200);
+}
+
+function showFeedback(correct) {
+  const overlay = document.getElementById('feedbackOverlay');
+  const bubble = document.getElementById('feedbackBubble');
+
+  if (correct) {
+    bubble.textContent = '✓ 全对！';
+    bubble.className = 'feedback-bubble correct';
+  } else {
+    bubble.textContent = '✗ 再试试';
+    bubble.className = 'feedback-bubble wrong';
+  }
+
+  overlay.classList.add('show');
+  setTimeout(() => overlay.classList.remove('show'), 900);
+}
+
+function updateHUD() {
+  document.getElementById('statRound').textContent = state.currentRound;
+  document.getElementById('statScore').textContent = state.score;
+  document.getElementById('statStreak').textContent = `🔥 ${state.streak}`;
+  const pct = ((state.currentRound - 1) / state.totalRounds) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+}
+
+// ═══════════════════════════════════════════════
+// END GAME & LEADERBOARD
+// ═══════════════════════════════════════════════
+function endGame() {
+  if (state.countdownTimer) clearInterval(state.countdownTimer);
+  state.phase = 'idle';
+  
+  const pct = state.score / state.totalRounds;
+  let grade, sub;
+  if (pct >= 0.9) { grade = '🏆'; sub = '完美！无与伦比！'; }
+  else if (pct >= 0.7) { grade = '🥇'; sub = '非常出色！'; }
+  else if (pct >= 0.5) { grade = '🥈'; sub = '不错，继续加油！'; }
+  else { grade = '🥉'; sub = '多加练习，你能行！'; }
+  
+  document.getElementById('resultGrade').textContent = grade;
+  document.getElementById('resultScore').textContent = `${state.score}/${state.totalRounds}`;
+  document.getElementById('resultSub').textContent = sub;
+  
+  // Save to leaderboard
+  const entry = {
+    name: state.playerName,
+    score: state.score,
+    total: state.totalRounds,
+    pct: Math.round(pct * 100),
+    date: new Date().toLocaleDateString('zh-CN'),
+    ts: Date.now(),
+  };
+  
+  let board = JSON.parse(localStorage.getItem('gesture_lb') || '[]');
+  board.push(entry);
+  board.sort((a, b) => b.pct - a.pct || b.score - a.score);
+  board = board.slice(0, 10);
+  localStorage.setItem('gesture_lb', JSON.stringify(board));
+  
+  renderLeaderboard(board, entry.ts);
+  showScreen('resultScreen');
+}
+
+function renderLeaderboard(board, currentTs) {
+  const lb = document.getElementById('leaderboard');
+  const rankIcons = ['gold', 'silver', 'bronze'];
+  
+  lb.innerHTML = `<div class="lb-title">🏅 排行榜 TOP ${board.length}</div>`;
+  
+  board.forEach((e, i) => {
+    const isMe = e.ts === currentTs;
+    const rankCls = rankIcons[i] || '';
+    lb.innerHTML += `
+      <div class="lb-entry ${isMe ? 'highlight' : ''}">
+        <div class="lb-rank ${rankCls}">${i + 1}</div>
+        <div>
+          <div class="lb-name">${e.name} ${isMe ? '← 你' : ''}</div>
+          <div class="lb-rounds">${e.total}回合 · ${e.date}</div>
+        </div>
+        <div class="lb-score">${e.pct}%</div>
+      </div>
+    `;
+  });
+}
+
+// ═══════════════════════════════════════════════
+// GESTURE DETECTION (MediaPipe Hands)
+// ═══════════════════════════════════════════════
+let cameraInited = false;
+let handsModel = null;
+let videoEl, canvasEl, ctx;
+
+function initCamera() {
+  cameraInited = true;
+  videoEl = document.getElementById('videoEl');
+  canvasEl = document.getElementById('canvasEl');
+  ctx = canvasEl.getContext('2d');
+
+  // Try MediaPipe
+  if (typeof Hands !== 'undefined') {
+    setupMediaPipe();
+  } else {
+    // Fallback: basic camera + simulated detection
+    setupFallbackCamera();
+  }
+}
+
+function setupMediaPipe() {
+  handsModel = new Hands({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${f}`
+  });
+
+  handsModel.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 0,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.5,
+  });
+
+  handsModel.onResults(onHandResults);
+
+  navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } })
+    .then(stream => {
+      videoEl.srcObject = stream;
+      videoEl.onloadedmetadata = () => {
+        canvasEl.width = videoEl.videoWidth;
+        canvasEl.height = videoEl.videoHeight;
+        processFrame();
+      };
+    })
+    .catch(err => {
+      console.warn('Camera error:', err);
+      setupFallbackCamera();
+    });
+}
+
+async function processFrame() {
+  if (handsModel && videoEl.readyState >= 2) {
+    await handsModel.send({ image: videoEl });
+  }
+  requestAnimationFrame(processFrame);
+}
+
+function onHandResults(results) {
+  ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+  const noHandMsg = document.getElementById('noHandMsg');
+  const labelLeft  = document.getElementById('detectedLabelLeft');
+  const labelRight = document.getElementById('detectedLabelRight');
+
+  state.detectedLeft  = null;
+  state.detectedRight = null;
+
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    state.handCount = 0;
+    noHandMsg.style.display = 'block';
+    labelLeft.textContent  = '左手: 未检测';
+    labelRight.textContent = '右手: 未检测';
+    return;
+  }
+
+  noHandMsg.style.display = 'none';
+  state.handCount = results.multiHandLandmarks.length;
+
+  results.multiHandLandmarks.forEach((landmarks, i) => {
+    // MediaPipe handedness: "Left"/"Right" from camera perspective (mirrored)
+    // In mirrored view: "Left" label = user's right hand, "Right" label = user's left hand
+    const handedness = results.multiHandedness?.[i]?.label || 'Right';
+    // After mirror flip: 'Left' from MP = right hand of user; 'Right' from MP = left hand of user
+    const isUserLeft = handedness === 'Right';
+
+    const colors = isUserLeft
+      ? { line: 'rgba(6,255,165,0.8)', dot: '#06ffa5', dotCenter: '#ffd23f' }
+      : { line: 'rgba(255,107,53,0.8)', dot: '#ff6b35', dotCenter: '#ffd23f' };
+
+    drawHandSkeleton(landmarks, colors);
+
+    const gesture = classifyGesture(landmarks);
+
+    if (isUserLeft) {
+      state.detectedLeft = gesture;
+      const g = GESTURES.find(g => g.id === gesture);
+      labelLeft.textContent = `左手: ${g ? g.emoji + g.name : '识别中'}`;
+    } else {
+      state.detectedRight = gesture;
+      const g = GESTURES.find(g => g.id === gesture);
+      labelRight.textContent = `右手: ${g ? g.emoji + g.name : '识别中'}`;
+    }
+  });
+
+  // Fill missing hand labels
+  if (!results.multiHandLandmarks.some((_, i) => (results.multiHandedness?.[i]?.label || 'Right') === 'Right')) {
+    labelLeft.textContent = '左手: 未检测';
+  }
+  if (!results.multiHandLandmarks.some((_, i) => (results.multiHandedness?.[i]?.label || 'Right') === 'Left')) {
+    labelRight.textContent = '右手: 未检测';
+  }
+}
+
+function drawHandSkeleton(lms, colors = { line: 'rgba(255,107,53,0.8)', dot: '#ff6b35', dotCenter: '#ffd23f' }) {
+  const W = canvasEl.width, H = canvasEl.height;
+
+  const connections = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [0,9],[9,10],[10,11],[11,12],
+    [0,13],[13,14],[14,15],[15,16],
+    [0,17],[17,18],[18,19],[19,20],
+    [5,9],[9,13],[13,17],
+  ];
+
+  ctx.strokeStyle = colors.line;
+  ctx.lineWidth = 2;
+  connections.forEach(([a,b]) => {
+    ctx.beginPath();
+    ctx.moveTo(lms[a].x * W, lms[a].y * H);
+    ctx.lineTo(lms[b].x * W, lms[b].y * H);
+    ctx.stroke();
+  });
+
+  lms.forEach((lm, i) => {
+    ctx.beginPath();
+    ctx.arc(lm.x * W, lm.y * H, i === 0 ? 6 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = i === 0 ? colors.dotCenter : colors.dot;
+    ctx.fill();
+  });
+}
+
+// Gesture classification based on finger extension
+function classifyGesture(lms) {
+  const fingerTips = [8, 12, 16, 20]; // index, middle, ring, pinky tips
+  const fingerMids = [6, 10, 14, 18]; // their PIPs
+  const fingerBases = [5, 9, 13, 17]; // their MCPs
+  const thumbTip = 4;
+  const thumbBase = 2;
+
+  // Check if each finger is extended
+  const extended = fingerTips.map((tip, i) => {
+    const mid = fingerMids[i];
+    const base = fingerBases[i];
+    // Extended if tip is higher (lower y) than base
+    return lms[tip].y < lms[base].y - 0.04;
+  });
+
+  const extCount = extended.filter(Boolean).length;
+
+  // Thumb extended
+  const thumbExtended = Math.abs(lms[thumbTip].x - lms[thumbBase].x) > 0.08;
+
+  // Classify:
+  // Palm: all 4 fingers extended
+  if (extCount >= 3 && extended[0] && extended[1]) {
+    return 'palm';
+  }
+  
+  // Knife (flat hand / blade): fingers extended but close together, hand tilted
+  // index + middle + ring extended, pinky extended, thumb tucked
+  if (extCount >= 3 && !thumbExtended) {
+    // Check if fingers are relatively together (knife shape)
+    const spread = Math.abs(lms[8].x - lms[20].x);
+    if (spread < 0.15) return 'knife';
+    return 'palm';
+  }
+
+  // Hammer (fist): no fingers extended
+  if (extCount <= 1 && !extended[0]) {
+    return 'hammer';
+  }
+
+  return null;
+}
+
+// Fallback: just open camera without hand detection
+function setupFallbackCamera() {
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+      videoEl.srcObject = stream;
+      document.getElementById('detectedLabel').textContent = '⚠️ 简化模式（按空格键确认）';
+      
+      // Space to confirm current gesture manually (for testing without full MP)
+      document.addEventListener('keydown', e => {
+        if (e.code === 'Space' && state.phase === 'waiting') {
+          // Simulate correct
+          state.lastDetected = state.targetGesture?.id;
+        }
+      });
+    })
+    .catch(() => {
+      document.getElementById('detectedLabel').textContent = '❌ 无摄像头权限';
+      document.getElementById('noHandMsg').textContent = '请允许摄像头访问';
+    });
+}
+</script>
+</body>
+</html>
